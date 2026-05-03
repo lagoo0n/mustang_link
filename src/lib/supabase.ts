@@ -25,5 +25,7 @@ export type Post = {
   category: string;
   image_url?: string | null;
   created_at: string;
+  parent_id: string | null;
   profiles?: Profile;
+  replies?: Post[];
 };

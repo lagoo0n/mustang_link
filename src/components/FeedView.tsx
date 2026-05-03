@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, FormEvent } from 'react';
-import { ArrowLeft, ImagePlus, X, Flag } from 'lucide-react';
+import { ArrowLeft, ImagePlus, X, Flag, MessageCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase, Post } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -28,6 +28,10 @@ export default function FeedView({ category, label, onBack }: Props) {
   const [fetching, setFetching] = useState(true);
   const [reportingPostId, setReportingPostId] = useState<string | null>(null);
   const [reportedPosts, setReportedPosts] = useState<Set<string>>(new Set());
+  const [replyingTo, setReplyingTo] = useState<string | null>(null);
+  const [replyContent, setReplyContent] = useState('');
+  const [replyLoading, setReplyLoading] = useState(false);
+  const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isLostAndFound = category === 'lost';
@@ -43,7 +47,24 @@ export default function FeedView({ category, label, onBack }: Props) {
       .select('*, profiles(username)')
       .eq('category', category)
       .order('created_at', { ascending: false });
-    setPosts(data ?? []);
+
+    if (!data) {
+      setPosts([]);
+      setFetching(false);
+      return;
+    }
+
+    const topLevel = data.filter(p => !p.parent_id);
+    const replies = data.filter(p => p.parent_id);
+
+    const nested = topLevel.map(post => ({
+      ...post,
+      replies: replies
+        .filter(r => r.parent_id === post.id)
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
+    }));
+
+    setPosts(nested);
     setFetching(false);
   }
 
@@ -87,7 +108,7 @@ export default function FeedView({ category, label, onBack }: Props) {
 
     const { error } = await supabase
       .from('posts')
-      .insert({ user_id: user.id, content: content.trim(), category, image_url });
+      .insert({ user_id: user.id, content: content.trim(), category, image_url, parent_id: null });
 
     if (!error) {
       setContent('');
@@ -97,9 +118,37 @@ export default function FeedView({ category, label, onBack }: Props) {
     setLoading(false);
   }
 
-  async function handleDelete(postId: string) {
+  async function handleReply(e: FormEvent, parentId: string) {
+    e.preventDefault();
+    if (!replyContent.trim() || !user) return;
+    setReplyLoading(true);
+
+    const { error } = await supabase
+      .from('posts')
+      .insert({ user_id: user.id, content: replyContent.trim(), category, parent_id: parentId });
+
+    if (!error) {
+      setReplyContent('');
+      setReplyingTo(null);
+      setExpandedThreads(prev => new Set(prev).add(parentId));
+      fetchPosts();
+    }
+    setReplyLoading(false);
+  }
+
+  async function handleDelete(postId: string, parentId: string | null) {
     await supabase.from('posts').delete().eq('id', postId);
-    setPosts(prev => prev.filter(p => p.id !== postId));
+    if (parentId) {
+      setPosts(prev =>
+        prev.map(p =>
+          p.id === parentId
+            ? { ...p, replies: (p.replies ?? []).filter(r => r.id !== postId) }
+            : p
+        )
+      );
+    } else {
+      setPosts(prev => prev.filter(p => p.id !== postId));
+    }
   }
 
   async function handleReport(postId: string, reason: string) {
@@ -111,6 +160,25 @@ export default function FeedView({ category, label, onBack }: Props) {
     });
     setReportedPosts(prev => new Set(prev).add(postId));
     setReportingPostId(null);
+  }
+
+  function toggleThread(postId: string) {
+    setExpandedThreads(prev => {
+      const next = new Set(prev);
+      if (next.has(postId)) next.delete(postId);
+      else next.add(postId);
+      return next;
+    });
+  }
+
+  function toggleReply(postId: string) {
+    if (replyingTo === postId) {
+      setReplyingTo(null);
+      setReplyContent('');
+    } else {
+      setReplyingTo(postId);
+      setReplyContent('');
+    }
   }
 
   function timeAgo(dateStr: string) {
@@ -204,80 +272,201 @@ export default function FeedView({ category, label, onBack }: Props) {
           <p className="text-center text-gray-500 text-sm mt-8">No posts yet. Be the first!</p>
         ) : (
           <AnimatePresence>
-            {posts.map(post => (
-              <motion.div
-                key={post.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className="bg-[#8B8B8B] rounded-[20px] p-4 shadow-md"
-              >
-                <div className="flex justify-between items-start mb-1">
-                  <span className="text-xs font-black text-black">@{post.profiles?.username ?? 'unknown'}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-700">{timeAgo(post.created_at)}</span>
-                    {user?.id !== post.user_id && (
-                      reportedPosts.has(post.id) ? (
-                        <span className="text-xs text-gray-600 font-bold">Reported</span>
-                      ) : (
-                        <button
-                          onClick={() => setReportingPostId(reportingPostId === post.id ? null : post.id)}
-                          className="text-gray-700 hover:text-red-800"
-                          title="Report post"
-                        >
-                          <Flag size={14} strokeWidth={2.5} />
-                        </button>
-                      )
-                    )}
-                    {user?.id === post.user_id && (
-                      <button
-                        onClick={() => handleDelete(post.id)}
-                        className="text-xs text-red-800 font-bold"
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <p className="text-sm text-black font-medium">{post.content}</p>
-                {post.image_url && (
-                  <img
-                    src={post.image_url}
-                    alt="post attachment"
-                    className="mt-2 w-full max-h-64 object-cover rounded-[10px]"
-                  />
-                )}
+            {posts.map(post => {
+              const replyCount = post.replies?.length ?? 0;
+              const isExpanded = expandedThreads.has(post.id);
+              const isReplying = replyingTo === post.id;
 
-                {/* Report reason picker */}
-                <AnimatePresence>
-                  {reportingPostId === post.id && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="mt-3 flex flex-col gap-1 overflow-hidden"
-                    >
-                      <p className="text-xs font-black text-black mb-1">Why are you reporting this?</p>
-                      {REPORT_REASONS.map(reason => (
-                        <button
-                          key={reason}
-                          onClick={() => handleReport(post.id, reason)}
-                          className="text-left text-xs bg-[#D9D9D9] hover:bg-red-200 text-black font-bold px-3 py-1.5 rounded-[8px]"
+              return (
+                <motion.div
+                  key={post.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  className="bg-[#8B8B8B] rounded-[20px] shadow-md overflow-hidden"
+                >
+                  {/* Post body */}
+                  <div className="p-4">
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="text-xs font-black text-black">@{post.profiles?.username ?? 'unknown'}</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-700">{timeAgo(post.created_at)}</span>
+                        {user?.id !== post.user_id && (
+                          reportedPosts.has(post.id) ? (
+                            <span className="text-xs text-gray-600 font-bold">Reported</span>
+                          ) : (
+                            <button
+                              onClick={() => setReportingPostId(reportingPostId === post.id ? null : post.id)}
+                              className="text-gray-700 hover:text-red-800"
+                              title="Report post"
+                            >
+                              <Flag size={14} strokeWidth={2.5} />
+                            </button>
+                          )
+                        )}
+                        {user?.id === post.user_id && (
+                          <button
+                            onClick={() => handleDelete(post.id, null)}
+                            className="text-xs text-red-800 font-bold"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-sm text-black font-medium mb-2">{post.content}</p>
+
+                    {post.image_url && (
+                      <img
+                        src={post.image_url}
+                        alt="post attachment"
+                        className="mb-3 w-full max-h-64 object-cover rounded-[10px]"
+                      />
+                    )}
+
+                    {/* Report reason picker */}
+                    <AnimatePresence>
+                      {reportingPostId === post.id && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="mb-3 flex flex-col gap-1 overflow-hidden"
                         >
-                          {reason}
-                        </button>
-                      ))}
+                          <p className="text-xs font-black text-black mb-1">Why are you reporting this?</p>
+                          {REPORT_REASONS.map(reason => (
+                            <button
+                              key={reason}
+                              onClick={() => handleReport(post.id, reason)}
+                              className="text-left text-xs bg-[#D9D9D9] hover:bg-red-200 text-black font-bold px-3 py-1.5 rounded-[8px]"
+                            >
+                              {reason}
+                            </button>
+                          ))}
+                          <button
+                            onClick={() => setReportingPostId(null)}
+                            className="text-xs text-gray-700 font-bold mt-1"
+                          >
+                            Cancel
+                          </button>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* Action row */}
+                    <div className="flex items-center gap-3">
                       <button
-                        onClick={() => setReportingPostId(null)}
-                        className="text-xs text-gray-700 font-bold mt-1"
+                        onClick={() => toggleReply(post.id)}
+                        className={`flex items-center gap-1 text-xs font-bold transition-colors ${
+                          isReplying ? 'text-[#43A047]' : 'text-gray-700 hover:text-black'
+                        }`}
                       >
-                        Cancel
+                        <MessageCircle size={14} />
+                        Reply
                       </button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </motion.div>
-            ))}
+                      {replyCount > 0 && (
+                        <button
+                          onClick={() => toggleThread(post.id)}
+                          className="flex items-center gap-1 text-xs font-bold text-gray-700 hover:text-black transition-colors"
+                        >
+                          {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                          {replyCount} {replyCount === 1 ? 'reply' : 'replies'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Reply composer */}
+                  <AnimatePresence>
+                    {isReplying && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="border-t border-black/10"
+                      >
+                        <form
+                          onSubmit={e => handleReply(e, post.id)}
+                          className="px-4 py-3 flex flex-col gap-2"
+                        >
+                          <textarea
+                            value={replyContent}
+                            onChange={e => setReplyContent(e.target.value)}
+                            placeholder={`Reply to @${post.profiles?.username ?? 'unknown'}...`}
+                            rows={2}
+                            autoFocus
+                            className="w-full bg-transparent border-none outline-none resize-none text-black font-bold placeholder-[#D9D9D9] text-sm"
+                          />
+                          <div className="flex justify-between items-center">
+                            <span className="text-xs text-gray-700 font-bold">@{profile?.username}</span>
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() => toggleReply(post.id)}
+                                className="text-xs text-gray-700 font-bold px-3 py-1 rounded-[10px] hover:text-black"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="submit"
+                                disabled={replyLoading || !replyContent.trim()}
+                                className="bg-[#43A047] text-white text-sm font-black px-4 py-1 rounded-[10px] disabled:opacity-40"
+                              >
+                                {replyLoading ? '...' : 'Reply'}
+                              </button>
+                            </div>
+                          </div>
+                        </form>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Replies thread */}
+                  <AnimatePresence>
+                    {isExpanded && replyCount > 0 && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        className="border-t border-black/10"
+                      >
+                        {post.replies!.map((reply, idx) => (
+                          <div
+                            key={reply.id}
+                            className={`px-4 py-3 flex flex-col gap-1 ${
+                              idx < replyCount - 1 ? 'border-b border-black/10' : ''
+                            }`}
+                          >
+                            <div className="flex gap-3">
+                              <div className="w-0.5 bg-black/20 rounded-full self-stretch ml-1 shrink-0" />
+                              <div className="flex-1">
+                                <div className="flex justify-between items-start mb-1">
+                                  <span className="text-xs font-black text-black">
+                                    @{reply.profiles?.username ?? 'unknown'}
+                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-700">{timeAgo(reply.created_at)}</span>
+                                    {user?.id === reply.user_id && (
+                                      <button
+                                        onClick={() => handleDelete(reply.id, post.id)}
+                                        className="text-xs text-red-800 font-bold"
+                                      >
+                                        ✕
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                                <p className="text-sm text-black font-medium">{reply.content}</p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
+              );
+            })}
           </AnimatePresence>
         )}
       </div>
