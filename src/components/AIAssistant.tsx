@@ -2,13 +2,42 @@ import { useState, useRef, useEffect, FormEvent } from 'react';
 import { Sparkles, ArrowUp, RotateCcw } from 'lucide-react';
 import { askAIWithContext } from '../lib/gemini';
 import { motion, AnimatePresence } from 'motion/react';
+import { Profile } from '../lib/supabase';
 
 type Message = {
   role: 'user' | 'assistant';
   content: string;
 };
 
-export default function AIAssistant() {
+type Props = {
+  onMessageUser?: (profile: Profile) => void;
+};
+
+// Turns @username tokens into clickable buttons
+function ResponseText({ text, onMessageUser }: { text: string; onMessageUser?: (profile: Profile) => void }) {
+  const parts = text.split(/(@\w+)/g);
+  return (
+    <span>
+      {parts.map((part, i) => {
+        if (/^@\w+$/.test(part) && onMessageUser) {
+          const username = part.slice(1);
+          return (
+            <button
+              key={i}
+              onClick={() => onMessageUser({ id: '', username, created_at: '' })}
+              className="text-[#154734] font-semibold hover:underline"
+            >
+              {part}
+            </button>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </span>
+  );
+}
+
+export default function AIAssistant({ onMessageUser }: Props) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -29,7 +58,6 @@ export default function AIAssistant() {
     setLoading(true);
 
     const { answer } = await askAIWithContext(input.trim(), updatedMessages);
-
     setMessages(prev => [...prev, { role: 'assistant', content: answer }]);
     setLoading(false);
   }
@@ -81,13 +109,16 @@ export default function AIAssistant() {
                         : 'bg-[#f5f5f5] text-[#1a1a1a]/80 rounded-bl-sm'
                     }`}
                   >
-                    {msg.content}
+                    {msg.role === 'assistant' ? (
+                      <ResponseText text={msg.content} onMessageUser={onMessageUser} />
+                    ) : (
+                      msg.content
+                    )}
                   </div>
                 </motion.div>
               ))}
             </AnimatePresence>
 
-            {/* Loading dots */}
             {loading && (
               <div className="flex gap-2 justify-start">
                 <div className="w-5 h-5 bg-[#154734] rounded-md flex items-center justify-center shrink-0 mt-0.5">

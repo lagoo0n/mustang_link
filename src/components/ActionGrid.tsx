@@ -1,7 +1,7 @@
-import { useState } from 'react';
 import { motion } from 'motion/react';
 import { Car, Search, Users, Briefcase } from 'lucide-react';
 import FeedView from './FeedView';
+import { Profile } from '../lib/supabase';
 
 const actions = [
   { id: 'rideshare',     label: 'Ride Share',    sub: 'Find a ride',        icon: Car,      color: '#154734', bg: '#eef4f0' },
@@ -10,15 +10,20 @@ const actions = [
   { id: 'opportunities',label: 'Opportunities', sub: 'Jobs & gigs',        icon: Briefcase,color: '#1a5c42', bg: '#e8f2ec' },
 ];
 
-export default function ActionGrid() {
-  const [activeCategory, setActiveCategory] = useState<{ id: string; label: string } | null>(null);
+type Props = {
+  activeCategory: { id: string; label: string } | null;
+  setActiveCategory: (cat: { id: string; label: string } | null) => void;
+  onMessageUser: (profile: Profile) => void;
+};
 
+export default function ActionGrid({ activeCategory, setActiveCategory, onMessageUser }: Props) {
   if (activeCategory) {
     return (
       <FeedView
         category={activeCategory.id}
         label={activeCategory.label}
         onBack={() => setActiveCategory(null)}
+        onMessageUser={onMessageUser}
       />
     );
   }

@@ -1,7 +1,25 @@
+import { useState, useEffect } from 'react';
 import logo from '../logo.png';
 
-export default function Footer() {
-  const now = new Date();
+const NAV_LINKS = [
+  { id: 'rideshare',      label: 'Ride Share' },
+  { id: 'lost',           label: 'Lost & Found' },
+  { id: 'social',         label: 'Social' },
+  { id: 'opportunities',  label: 'Opportunities' },
+];
+
+type Props = {
+  onNavigate: (cat: { id: string; label: string }) => void;
+};
+
+export default function Footer({ onNavigate }: Props) {
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const time = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
   const date = `${String(now.getMonth() + 1).padStart(2, '0')} · ${String(now.getDate()).padStart(2, '0')} · ${String(now.getFullYear()).slice(2)}`;
 
@@ -19,10 +37,15 @@ export default function Footer() {
 
         {/* Right — links */}
         <div className="flex flex-col gap-1.5 text-right">
-          <span className="text-xs text-[#1a1a1a]/35 hover:text-[#154734] transition-colors cursor-default">Ride Share</span>
-          <span className="text-xs text-[#1a1a1a]/35 hover:text-[#154734] transition-colors cursor-default">Lost & Found</span>
-          <span className="text-xs text-[#1a1a1a]/35 hover:text-[#154734] transition-colors cursor-default">Social</span>
-          <span className="text-xs text-[#1a1a1a]/35 hover:text-[#154734] transition-colors cursor-default">Opportunities</span>
+          {NAV_LINKS.map(link => (
+            <button
+              key={link.id}
+              onClick={() => onNavigate({ id: link.id, label: link.label })}
+              className="text-xs text-[#1a1a1a]/35 hover:text-[#154734] transition-colors text-right"
+            >
+              {link.label}
+            </button>
+          ))}
         </div>
       </div>
 
