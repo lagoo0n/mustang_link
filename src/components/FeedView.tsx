@@ -1,5 +1,5 @@
-import { useState, useEffect, FormEvent } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { useState, useEffect, useRef, FormEvent } from 'react';
+import { ArrowLeft, ImagePlus, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase, Post } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -14,8 +14,13 @@ export default function FeedView({ category, label, onBack }: Props) {
   const { user, profile } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [content, setContent] = useState('');
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const isLostAndFound = category === 'lost';
 
   useEffect(() => {
     fetchPosts();
@@ -32,17 +37,51 @@ export default function FeedView({ category, label, onBack }: Props) {
     setFetching(false);
   }
 
+  function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  }
+
+  function clearImage() {
+    setImageFile(null);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
   async function handlePost(e: FormEvent) {
     e.preventDefault();
     if (!content.trim() || !user) return;
     setLoading(true);
 
+    let image_url: string | null = null;
+
+    if (imageFile) {
+      const ext = imageFile.name.split('.').pop();
+      const path = `${user.id}/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from('post-images')
+        .upload(path, imageFile, { upsert: false });
+
+      if (uploadError) {
+        setLoading(false);
+        return;
+      }
+
+      const { data: urlData } = supabase.storage
+        .from('post-images')
+        .getPublicUrl(path);
+      image_url = urlData.publicUrl;
+    }
+
     const { error } = await supabase
       .from('posts')
-      .insert({ user_id: user.id, content: content.trim(), category });
+      .insert({ user_id: user.id, content: content.trim(), category, image_url });
 
     if (!error) {
       setContent('');
+      clearImage();
       fetchPosts();
     }
     setLoading(false);
@@ -83,8 +122,48 @@ export default function FeedView({ category, label, onBack }: Props) {
             rows={2}
             className="w-full bg-transparent border-none outline-none resize-none text-black font-bold placeholder-[#D9D9D9] text-sm"
           />
+
+          {/* Image preview */}
+          {imagePreview && (
+            <div className="relative w-full">
+              <img
+                src={imagePreview}
+                alt="preview"
+                className="w-full max-h-48 object-cover rounded-[10px]"
+              />
+              <button
+                type="button"
+                onClick={clearImage}
+                className="absolute top-1 right-1 bg-black bg-opacity-60 text-white rounded-full p-0.5"
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
           <div className="flex justify-between items-center">
-            <span className="text-xs text-gray-700 font-bold">@{profile?.username}</span>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-700 font-bold">@{profile?.username}</span>
+              {isLostAndFound && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    className="hidden"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="text-gray-700 hover:text-black"
+                    title="Attach image"
+                  >
+                    <ImagePlus size={18} strokeWidth={2.5} />
+                  </button>
+                </>
+              )}
+            </div>
             <button
               type="submit"
               disabled={loading || !content.trim()}
@@ -127,6 +206,13 @@ export default function FeedView({ category, label, onBack }: Props) {
                   </div>
                 </div>
                 <p className="text-sm text-black font-medium">{post.content}</p>
+                {post.image_url && (
+                  <img
+                    src={post.image_url}
+                    alt="post attachment"
+                    className="mt-2 w-full max-h-64 object-cover rounded-[10px]"
+                  />
+                )}
               </motion.div>
             ))}
           </AnimatePresence>
