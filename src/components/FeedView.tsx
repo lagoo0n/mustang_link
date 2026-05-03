@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, FormEvent } from 'react';
-import { ArrowLeft, ImagePlus, X } from 'lucide-react';
+import { ArrowLeft, ImagePlus, X, Flag } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase, Post } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -10,6 +10,14 @@ type Props = {
   onBack: () => void;
 };
 
+const REPORT_REASONS = [
+  'Inappropriate content',
+  'Spam',
+  'Harassment',
+  'False information',
+  'Other',
+];
+
 export default function FeedView({ category, label, onBack }: Props) {
   const { user, profile } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
@@ -18,6 +26,8 @@ export default function FeedView({ category, label, onBack }: Props) {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(true);
+  const [reportingPostId, setReportingPostId] = useState<string | null>(null);
+  const [reportedPosts, setReportedPosts] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isLostAndFound = category === 'lost';
@@ -90,6 +100,17 @@ export default function FeedView({ category, label, onBack }: Props) {
   async function handleDelete(postId: string) {
     await supabase.from('posts').delete().eq('id', postId);
     setPosts(prev => prev.filter(p => p.id !== postId));
+  }
+
+  async function handleReport(postId: string, reason: string) {
+    if (!user) return;
+    await supabase.from('reports').insert({
+      post_id: postId,
+      reporter_id: user.id,
+      reason,
+    });
+    setReportedPosts(prev => new Set(prev).add(postId));
+    setReportingPostId(null);
   }
 
   function timeAgo(dateStr: string) {
@@ -195,6 +216,19 @@ export default function FeedView({ category, label, onBack }: Props) {
                   <span className="text-xs font-black text-black">@{post.profiles?.username ?? 'unknown'}</span>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-700">{timeAgo(post.created_at)}</span>
+                    {user?.id !== post.user_id && (
+                      reportedPosts.has(post.id) ? (
+                        <span className="text-xs text-gray-600 font-bold">Reported</span>
+                      ) : (
+                        <button
+                          onClick={() => setReportingPostId(reportingPostId === post.id ? null : post.id)}
+                          className="text-gray-700 hover:text-red-800"
+                          title="Report post"
+                        >
+                          <Flag size={14} strokeWidth={2.5} />
+                        </button>
+                      )
+                    )}
                     {user?.id === post.user_id && (
                       <button
                         onClick={() => handleDelete(post.id)}
@@ -213,6 +247,35 @@ export default function FeedView({ category, label, onBack }: Props) {
                     className="mt-2 w-full max-h-64 object-cover rounded-[10px]"
                   />
                 )}
+
+                {/* Report reason picker */}
+                <AnimatePresence>
+                  {reportingPostId === post.id && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="mt-3 flex flex-col gap-1 overflow-hidden"
+                    >
+                      <p className="text-xs font-black text-black mb-1">Why are you reporting this?</p>
+                      {REPORT_REASONS.map(reason => (
+                        <button
+                          key={reason}
+                          onClick={() => handleReport(post.id, reason)}
+                          className="text-left text-xs bg-[#D9D9D9] hover:bg-red-200 text-black font-bold px-3 py-1.5 rounded-[8px]"
+                        >
+                          {reason}
+                        </button>
+                      ))}
+                      <button
+                        onClick={() => setReportingPostId(null)}
+                        className="text-xs text-gray-700 font-bold mt-1"
+                      >
+                        Cancel
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             ))}
           </AnimatePresence>
