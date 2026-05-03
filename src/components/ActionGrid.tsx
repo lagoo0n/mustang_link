@@ -1,16 +1,13 @@
 import { useState } from 'react';
 import { motion } from 'motion/react';
-import rideshare from '../ridshare.png';
-import lost from '../lost.png';
-import social from '../social.png';
-import opportunity from '../oppurtunity.png';
+import { Car, Search, Users, Briefcase } from 'lucide-react';
 import FeedView from './FeedView';
 
 const actions = [
-  { id: 'rideshare', label: 'Ride Share', img: rideshare },
-  { id: 'lost', label: 'Lost & Found', img: lost },
-  { id: 'social', label: 'Social', img: social },
-  { id: 'opportunities', label: 'Oppurtunities', img: opportunity },
+  { id: 'rideshare',     label: 'Ride Share',    sub: 'Find a ride',        icon: Car,      color: '#154734', bg: '#eef4f0' },
+  { id: 'lost',         label: 'Lost & Found',  sub: 'Missing something?', icon: Search,   color: '#1a5c42', bg: '#e8f2ec' },
+  { id: 'social',       label: 'Social',        sub: 'Connect up',         icon: Users,    color: '#154734', bg: '#eef4f0' },
+  { id: 'opportunities',label: 'Opportunities', sub: 'Jobs & gigs',        icon: Briefcase,color: '#1a5c42', bg: '#e8f2ec' },
 ];
 
 export default function ActionGrid() {
@@ -27,28 +24,44 @@ export default function ActionGrid() {
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3 px-14 pt-8 pb-4">
-      {actions.map((action) => (
-        <motion.button
-          key={action.id}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          className="w-full"
-          onClick={() => setActiveCategory({ id: action.id, label: action.label })}
-        >
-          <div
-            className="bg-[#8B8B8B] rounded-[20px] shadow-md p-3 flex flex-col justify-between w-full"
-            style={{ aspectRatio: '1 / 1' }}
-          >
-            <div className="flex-1 flex items-center justify-center min-h-0">
-              <img src={action.img} alt={action.label} className="object-contain w-3/5" style={{ height: '50%' }} />
-            </div>
-            <span className="text-[16px] font-bold text-black text-center whitespace-pre-line leading-tight w-full shrink-0">
-              {action.label}
-            </span>
-          </div>
-        </motion.button>
-      ))}
+    <div className="px-6 pt-2 pb-2">
+      <p className="text-xs text-[#1a1a1a]/35 font-medium mb-4 tracking-wide uppercase">Explore</p>
+
+      <div className="grid grid-cols-2 gap-3">
+        {actions.map((action, i) => {
+          const Icon = action.icon;
+          return (
+            <motion.button
+              key={action.id}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.06, duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+              whileHover={{
+                y: -4,
+                boxShadow: '0 12px 32px rgba(21,71,52,0.12)',
+                transition: { duration: 0.2, ease: 'easeOut' }
+              }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => setActiveCategory({ id: action.id, label: action.label })}
+              className="text-left rounded-2xl p-4 cursor-pointer"
+              style={{ background: action.bg, aspectRatio: '1/1' }}
+            >
+              <div className="flex flex-col justify-between h-full">
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center"
+                  style={{ background: `${action.color}18` }}
+                >
+                  <Icon size={17} style={{ color: action.color }} strokeWidth={2} />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold leading-tight" style={{ color: action.color }}>{action.label}</p>
+                  <p className="text-xs mt-0.5" style={{ color: `${action.color}70` }}>{action.sub}</p>
+                </div>
+              </div>
+            </motion.button>
+          );
+        })}
+      </div>
     </div>
   );
 }

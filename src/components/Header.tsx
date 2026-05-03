@@ -1,25 +1,28 @@
-import { Link2, LogOut } from 'lucide-react';
+import logo from '../logo.png';
 import { useAuth } from '../context/AuthContext';
 
 export default function Header() {
   const { profile, signOut } = useAuth();
 
   return (
-    <header className="flex items-center justify-between px-4 py-3 bg-[#E9E9E9]">
-      <h1 className="text-[32px] font-bold text-[#43A047] tracking-tight flex items-center gap-1">
-        MustangLink
-        <Link2 className="text-[#43A047] rotate-45 transform -translate-y-0.5" size={32} strokeWidth={3} />
-      </h1>
-      <div className="flex items-center gap-2">
+    <header className="flex items-center justify-between px-6 pt-8 pb-4">
+      <div className="flex items-center gap-2.5">
+        <img src={logo} alt="MustangLink" className="w-9 h-9 object-contain" />
+        <div>
+          <h1 className="text-[15px] font-semibold text-[#154734] leading-none tracking-tight">MustangLink</h1>
+          <p className="text-[10px] text-[#154734]/40 mt-0.5 tracking-wide">Cal Poly SLO</p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
         {profile && (
-          <span className="text-xs font-black text-gray-600">@{profile.username}</span>
+          <span className="text-xs text-[#154734]/50 font-medium">@{profile.username}</span>
         )}
         <button
           onClick={signOut}
-          className="w-10 h-10 bg-[#313621] rounded-full flex items-center justify-center"
-          title="Sign out"
+          className="text-xs text-[#154734]/50 hover:text-[#154734] transition-colors font-medium"
         >
-          <LogOut size={18} className="text-white" />
+          Sign out
         </button>
       </div>
     </header>
