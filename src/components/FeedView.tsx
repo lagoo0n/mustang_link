@@ -74,9 +74,10 @@ export default function FeedView({ category, label, onBack }: Props) {
   async function fetchPosts() {
     setFetching(true);
     const { data } = await supabase
-      .from('posts')
+      .from('posts_with_report_count')
       .select('*, profiles(username)')
       .eq('category', category)
+      .lt('report_count', 3)
       .order('created_at', { ascending: false });
 
     if (!data) { setPosts([]); setFetching(false); return; }
