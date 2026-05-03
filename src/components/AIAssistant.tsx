@@ -15,7 +15,9 @@ export default function AIAssistant() {
     setLoading(true);
     setResponse('');
     setSources([]);
-    const { answer, sources: postSources } = await askAIWithContext(input);
+    const prompt = input;
+    setInput('');
+    const { answer, sources: postSources } = await askAIWithContext(prompt);
     setResponse(answer);
     setSources(postSources);
     setLoading(false);
