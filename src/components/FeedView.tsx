@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, FormEvent } from 'react';
+import { useState, useEffect, useRef, FormEvent, ChangeEvent } from 'react';
 import { ArrowLeft, ImagePlus, X, Flag, MessageCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { supabase, Post } from '../lib/supabase';
+import { supabase, Post, SUBCATEGORIES } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 
 type Props = {
@@ -18,10 +18,25 @@ const REPORT_REASONS = [
   'Other',
 ];
 
+// Distinct pill colors per subcategory
+const SUBCATEGORY_COLORS: Record<string, string> = {
+  'To SLO':       'bg-blue-200 text-blue-900',
+  'From SLO':     'bg-purple-200 text-purple-900',
+  'On-Campus':    'bg-green-200 text-green-900',
+  'Off-Campus':   'bg-orange-200 text-orange-900',
+  'Events':       'bg-pink-200 text-pink-900',
+  'Discussions':  'bg-yellow-200 text-yellow-900',
+  'Questions':    'bg-cyan-200 text-cyan-900',
+  'Jobs':         'bg-emerald-200 text-emerald-900',
+  'Internships':  'bg-violet-200 text-violet-900',
+};
+
 export default function FeedView({ category, label, onBack }: Props) {
   const { user, profile } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [content, setContent] = useState('');
+  const [subcategory, setSubcategory] = useState<string>('');
+  const [activeFilter, setActiveFilter] = useState<string>('All');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -35,6 +50,7 @@ export default function FeedView({ category, label, onBack }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isLostAndFound = category === 'lost';
+  const subcategoryOptions = SUBCATEGORIES[category] ?? [];
 
   useEffect(() => {
     fetchPosts();
@@ -68,7 +84,7 @@ export default function FeedView({ category, label, onBack }: Props) {
     setFetching(false);
   }
 
-  function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleImageChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setImageFile(file);
@@ -108,10 +124,18 @@ export default function FeedView({ category, label, onBack }: Props) {
 
     const { error } = await supabase
       .from('posts')
-      .insert({ user_id: user.id, content: content.trim(), category, image_url, parent_id: null });
+      .insert({
+        user_id: user.id,
+        content: content.trim(),
+        category,
+        subcategory: subcategory || null,
+        image_url,
+        parent_id: null,
+      });
 
     if (!error) {
       setContent('');
+      setSubcategory('');
       clearImage();
       fetchPosts();
     }
@@ -125,7 +149,7 @@ export default function FeedView({ category, label, onBack }: Props) {
 
     const { error } = await supabase
       .from('posts')
-      .insert({ user_id: user.id, content: replyContent.trim(), category, parent_id: parentId });
+      .insert({ user_id: user.id, content: replyContent.trim(), category, subcategory: null, parent_id: parentId });
 
     if (!error) {
       setReplyContent('');
@@ -191,6 +215,10 @@ export default function FeedView({ category, label, onBack }: Props) {
     return `${Math.floor(hrs / 24)}d ago`;
   }
 
+  const filteredPosts = activeFilter === 'All'
+    ? posts
+    : posts.filter(p => p.subcategory === activeFilter);
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -204,6 +232,20 @@ export default function FeedView({ category, label, onBack }: Props) {
       {/* Compose */}
       <div className="px-4 pb-3">
         <form onSubmit={handlePost} className="bg-[#8B8B8B] rounded-[20px] p-4 shadow-md flex flex-col gap-2">
+          {/* Subcategory dropdown */}
+          {subcategoryOptions.length > 0 && (
+            <select
+              value={subcategory}
+              onChange={e => setSubcategory(e.target.value)}
+              className="w-full bg-[#D9D9D9] text-black font-bold text-sm rounded-[10px] px-3 py-1.5 border-none outline-none"
+            >
+              <option value="">Select a category...</option>
+              {subcategoryOptions.map(opt => (
+                <option key={opt} value={opt}>{opt}</option>
+              ))}
+            </select>
+          )}
+
           <textarea
             value={content}
             onChange={e => setContent(e.target.value)}
@@ -264,18 +306,42 @@ export default function FeedView({ category, label, onBack }: Props) {
         </form>
       </div>
 
+      {/* Filter pills */}
+      {subcategoryOptions.length > 0 && (
+        <div className="px-4 pb-3 flex gap-2 overflow-x-auto scrollbar-hide">
+          {['All', ...subcategoryOptions].map(opt => (
+            <button
+              key={opt}
+              onClick={() => setActiveFilter(opt)}
+              className={`shrink-0 text-xs font-black px-3 py-1 rounded-full transition-colors ${
+                activeFilter === opt
+                  ? 'bg-black text-white'
+                  : 'bg-[#D9D9D9] text-black hover:bg-[#c0c0c0]'
+              }`}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Feed */}
       <div className="flex-1 overflow-y-auto px-4 flex flex-col gap-3 pb-4">
         {fetching ? (
           <p className="text-center text-gray-500 text-sm mt-8">Loading...</p>
-        ) : posts.length === 0 ? (
-          <p className="text-center text-gray-500 text-sm mt-8">No posts yet. Be the first!</p>
+        ) : filteredPosts.length === 0 ? (
+          <p className="text-center text-gray-500 text-sm mt-8">
+            {activeFilter === 'All' ? 'No posts yet. Be the first!' : `No posts in "${activeFilter}" yet.`}
+          </p>
         ) : (
           <AnimatePresence>
-            {posts.map(post => {
+            {filteredPosts.map(post => {
               const replyCount = post.replies?.length ?? 0;
               const isExpanded = expandedThreads.has(post.id);
               const isReplying = replyingTo === post.id;
+              const pillColor = post.subcategory
+                ? (SUBCATEGORY_COLORS[post.subcategory] ?? 'bg-gray-200 text-gray-800')
+                : null;
 
               return (
                 <motion.div
@@ -288,8 +354,15 @@ export default function FeedView({ category, label, onBack }: Props) {
                   {/* Post body */}
                   <div className="p-4">
                     <div className="flex justify-between items-start mb-1">
-                      <span className="text-xs font-black text-black">@{post.profiles?.username ?? 'unknown'}</span>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-black text-black">@{post.profiles?.username ?? 'unknown'}</span>
+                        {post.subcategory && pillColor && (
+                          <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${pillColor}`}>
+                            {post.subcategory}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
                         <span className="text-xs text-gray-700">{timeAgo(post.created_at)}</span>
                         {user?.id !== post.user_id && (
                           reportedPosts.has(post.id) ? (
