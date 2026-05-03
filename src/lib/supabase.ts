@@ -37,3 +37,34 @@ export const SUBCATEGORIES: Record<string, string[]> = {
   social: ['Events', 'Discussions', 'Questions'],
   opportunities: ['Jobs', 'Internships', 'Events'],
 };
+
+export type Conversation = {
+  id: string;
+  user1_id: string;
+  user2_id: string;
+  created_at: string;
+  other_user?: Profile;
+  last_message?: string;
+  last_message_at?: string;
+};
+
+export type Message = {
+  id: string;
+  conversation_id: string;
+  sender_id: string;
+  content: string | null;
+  image_url: string | null;
+  reply_to_id: string | null;
+  created_at: string;
+  sender?: Profile;
+  reply_to?: Message | null;
+  reactions?: MessageReaction[];
+};
+
+export type MessageReaction = {
+  id: string;
+  message_id: string;
+  user_id: string;
+  emoji: string;
+  created_at: string;
+};

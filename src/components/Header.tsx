@@ -1,7 +1,12 @@
 import logo from '../logo.png';
+import { MessageCircle } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-export default function Header() {
+type Props = {
+  onOpenDMs: () => void;
+};
+
+export default function Header({ onOpenDMs }: Props) {
   const { profile, signOut } = useAuth();
 
   return (
@@ -15,6 +20,13 @@ export default function Header() {
       </div>
 
       <div className="flex items-center gap-3">
+        <button
+          onClick={onOpenDMs}
+          className="text-[#154734]/40 hover:text-[#154734] transition-colors"
+          title="Messages"
+        >
+          <MessageCircle size={18} strokeWidth={2} />
+        </button>
         {profile && (
           <span className="text-xs text-[#154734]/50 font-medium">@{profile.username}</span>
         )}

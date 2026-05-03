@@ -1,13 +1,14 @@
 import { useState, useEffect, useRef, FormEvent, ChangeEvent } from 'react';
 import { ArrowLeft, ImagePlus, X, Flag, MessageCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { supabase, Post, SUBCATEGORIES } from '../lib/supabase';
+import { supabase, Post, SUBCATEGORIES, Profile } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 
 type Props = {
   category: string;
   label: string;
   onBack: () => void;
+  onMessageUser?: (profile: Profile) => void;
 };
 
 const REPORT_REASONS = [
@@ -30,7 +31,7 @@ const SUBCATEGORY_COLORS: Record<string, string> = {
   'Internships': 'bg-violet-100 text-violet-700',
 };
 
-export default function FeedView({ category, label, onBack }: Props) {
+export default function FeedView({ category, label, onBack, onMessageUser }: Props) {
   const { user, profile } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [content, setContent] = useState('');
@@ -48,6 +49,7 @@ export default function FeedView({ category, label, onBack }: Props) {
   const [replyImagePreview, setReplyImagePreview] = useState<string | null>(null);
   const [replyLoading, setReplyLoading] = useState(false);
   const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
+  const [userMenuPostId, setUserMenuPostId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const replyFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -317,7 +319,7 @@ export default function FeedView({ category, label, onBack }: Props) {
       )}
 
       {/* Feed */}
-      <div className="flex-1 overflow-y-auto px-6 flex flex-col gap-3 pb-6">
+      <div className="flex-1 overflow-y-auto px-6 flex flex-col gap-3 pb-6" onClick={() => setUserMenuPostId(null)}>
         {fetching ? (
           <div className="flex justify-center mt-12">
             <div className="w-5 h-5 border-2 border-[#154734] border-t-transparent rounded-full animate-spin" />
@@ -350,14 +352,49 @@ export default function FeedView({ category, label, onBack }: Props) {
                   <div className="p-4">
                     <div className="flex justify-between items-start mb-2.5">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <div className="w-7 h-7 bg-[#eef4f0] rounded-xl flex items-center justify-center shrink-0">
-                          <span className="text-[11px] font-semibold text-[#154734]">
-                            {(post.profiles?.username ?? '?')[0].toUpperCase()}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="text-xs font-semibold text-[#1a1a1a]">@{post.profiles?.username ?? 'unknown'}</p>
-                          <p className="text-[10px] text-[#1a1a1a]/30">{timeAgo(post.created_at)}</p>
+                        {/* Clickable avatar + username — shows message dropdown */}
+                        <div className="relative">
+                          <button
+                            onClick={e => {
+                              e.stopPropagation();
+                              if (user?.id === post.user_id) return;
+                              setUserMenuPostId(userMenuPostId === post.id ? null : post.id);
+                            }}
+                            className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                          >
+                            <div className="w-7 h-7 bg-[#eef4f0] rounded-xl flex items-center justify-center shrink-0">
+                              <span className="text-[11px] font-semibold text-[#154734]">
+                                {(post.profiles?.username ?? '?')[0].toUpperCase()}
+                              </span>
+                            </div>
+                            <div>
+                              <p className="text-xs font-semibold text-[#1a1a1a]">@{post.profiles?.username ?? 'unknown'}</p>
+                              <p className="text-[10px] text-[#1a1a1a]/30">{timeAgo(post.created_at)}</p>
+                            </div>
+                          </button>
+                          <AnimatePresence>
+                            {userMenuPostId === post.id && post.profiles && (
+                              <motion.div
+                                initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                                transition={{ duration: 0.12 }}
+                                onClick={e => e.stopPropagation()}
+                                className="absolute left-0 top-full mt-1 z-20 bg-white border border-[#e5e7e5] rounded-xl shadow-lg overflow-hidden"
+                              >
+                                <button
+                                  onClick={() => {
+                                    setUserMenuPostId(null);
+                                    onMessageUser?.(post.profiles!);
+                                  }}
+                                  className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-[#154734] hover:bg-[#eef4f0] transition-colors whitespace-nowrap"
+                                >
+                                  <MessageCircle size={12} />
+                                  Message @{post.profiles.username}
+                                </button>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </div>
                         {post.subcategory && pillColor && (
                           <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${pillColor}`}>

@@ -2,8 +2,37 @@ import { useState, FormEvent } from 'react';
 import { Sparkles, ArrowUp } from 'lucide-react';
 import { askAIWithContext, type PostSource } from '../lib/gemini';
 import { motion, AnimatePresence } from 'motion/react';
+import { Profile } from '../lib/supabase';
 
-export default function AIAssistant() {
+type Props = {
+  onMessageUser?: (profile: Profile) => void;
+};
+
+// Renders text and turns @username tokens into clickable buttons
+function ResponseText({ text, onMessageUser }: { text: string; onMessageUser?: (profile: Profile) => void }) {
+  const parts = text.split(/(@\w+)/g);
+  return (
+    <p className="text-sm text-[#1a1a1a]/70 leading-relaxed">
+      {parts.map((part, i) => {
+        if (/^@\w+$/.test(part) && onMessageUser) {
+          const username = part.slice(1);
+          return (
+            <button
+              key={i}
+              onClick={() => onMessageUser({ id: '', username, created_at: '' })}
+              className="text-[#154734] font-semibold hover:underline"
+            >
+              {part}
+            </button>
+          );
+        }
+        return <span key={i}>{part}</span>;
+      })}
+    </p>
+  );
+}
+
+export default function AIAssistant({ onMessageUser }: Props) {
   const [input, setInput] = useState('');
   const [response, setResponse] = useState('');
   const [sources, setSources] = useState<PostSource[]>([]);
@@ -58,7 +87,7 @@ export default function AIAssistant() {
                   </div>
                 ) : (
                   <div className="flex flex-col gap-2">
-                    <p className="text-sm text-[#1a1a1a]/70 leading-relaxed">{response}</p>
+                    <ResponseText text={response} onMessageUser={onMessageUser} />
                     {uniqueCategories.length > 0 && (
                       <div className="flex flex-wrap gap-1">
                         <span className="text-xs text-[#1a1a1a]/30 font-medium">from feed:</span>
