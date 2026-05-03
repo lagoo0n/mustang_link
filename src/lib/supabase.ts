@@ -23,6 +23,7 @@ export type Post = {
   user_id: string;
   content: string;
   category: string;
+  image_url?: string | null;
   created_at: string;
   parent_id: string | null;
   profiles?: Profile;
