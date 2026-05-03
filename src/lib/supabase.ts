@@ -24,5 +24,7 @@ export type Post = {
   content: string;
   category: string;
   created_at: string;
+  parent_id: string | null;
   profiles?: Profile;
+  replies?: Post[];
 };
