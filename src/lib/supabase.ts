@@ -23,9 +23,17 @@ export type Post = {
   user_id: string;
   content: string;
   category: string;
+  subcategory: string | null;
   image_url?: string | null;
   created_at: string;
   parent_id: string | null;
   profiles?: Profile;
   replies?: Post[];
+};
+
+export const SUBCATEGORIES: Record<string, string[]> = {
+  rideshare: ['To SLO', 'From SLO'],
+  lost: ['On-Campus', 'Off-Campus'],
+  social: ['Events', 'Discussions', 'Questions'],
+  opportunities: ['Jobs', 'Internships', 'Events'],
 };

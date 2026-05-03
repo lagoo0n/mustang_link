@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef, FormEvent } from 'react';
+import { useState, useEffect, useRef, FormEvent, ChangeEvent } from 'react';
 import { ArrowLeft, ImagePlus, X, Flag, MessageCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { supabase, Post } from '../lib/supabase';
+import { supabase, Post, SUBCATEGORIES } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 
 type Props = {
@@ -18,10 +18,24 @@ const REPORT_REASONS = [
   'Other',
 ];
 
+const SUBCATEGORY_COLORS: Record<string, string> = {
+  'To SLO':      'bg-blue-100 text-blue-700',
+  'From SLO':    'bg-purple-100 text-purple-700',
+  'On-Campus':   'bg-green-100 text-green-700',
+  'Off-Campus':  'bg-orange-100 text-orange-700',
+  'Events':      'bg-pink-100 text-pink-700',
+  'Discussions': 'bg-yellow-100 text-yellow-700',
+  'Questions':   'bg-cyan-100 text-cyan-700',
+  'Jobs':        'bg-emerald-100 text-emerald-700',
+  'Internships': 'bg-violet-100 text-violet-700',
+};
+
 export default function FeedView({ category, label, onBack }: Props) {
   const { user, profile } = useAuth();
   const [posts, setPosts] = useState<Post[]>([]);
   const [content, setContent] = useState('');
+  const [subcategory, setSubcategory] = useState<string>('');
+  const [activeFilter, setActiveFilter] = useState<string>('All');
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -35,6 +49,7 @@ export default function FeedView({ category, label, onBack }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isLostAndFound = category === 'lost';
+  const subcategoryOptions = SUBCATEGORIES[category] ?? [];
 
   useEffect(() => { fetchPosts(); }, [category]);
 
@@ -61,7 +76,7 @@ export default function FeedView({ category, label, onBack }: Props) {
     setFetching(false);
   }
 
-  function handleImageChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleImageChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
     setImageFile(file);
@@ -89,10 +104,16 @@ export default function FeedView({ category, label, onBack }: Props) {
       image_url = urlData.publicUrl;
     }
 
-    const { error } = await supabase.from('posts')
-      .insert({ user_id: user.id, content: content.trim(), category, image_url, parent_id: null });
+    const { error } = await supabase.from('posts').insert({
+      user_id: user.id,
+      content: content.trim(),
+      category,
+      subcategory: subcategory || null,
+      image_url,
+      parent_id: null,
+    });
 
-    if (!error) { setContent(''); clearImage(); fetchPosts(); }
+    if (!error) { setContent(''); setSubcategory(''); clearImage(); fetchPosts(); }
     setLoading(false);
   }
 
@@ -102,7 +123,7 @@ export default function FeedView({ category, label, onBack }: Props) {
     setReplyLoading(true);
 
     const { error } = await supabase.from('posts')
-      .insert({ user_id: user.id, content: replyContent.trim(), category, parent_id: parentId });
+      .insert({ user_id: user.id, content: replyContent.trim(), category, subcategory: null, parent_id: parentId });
 
     if (!error) {
       setReplyContent('');
@@ -154,15 +175,16 @@ export default function FeedView({ category, label, onBack }: Props) {
     return `${Math.floor(hrs / 24)}d ago`;
   }
 
+  const filteredPosts = activeFilter === 'All'
+    ? posts
+    : posts.filter(p => p.subcategory === activeFilter);
+
   return (
     <div className="flex flex-col h-full">
 
       {/* Header */}
       <div className="flex items-center gap-3 px-6 py-4">
-        <button
-          onClick={onBack}
-          className="w-8 h-8 rounded-xl bg-[#154734]/8 flex items-center justify-center hover:bg-[#154734]/12 transition-colors"
-        >
+        <button onClick={onBack} className="w-8 h-8 rounded-xl bg-[#154734]/8 flex items-center justify-center hover:bg-[#154734]/12 transition-colors">
           <ArrowLeft size={15} strokeWidth={2.5} className="text-[#154734]" />
         </button>
         <h2 className="text-base font-semibold text-[#1a1a1a]">{label}</h2>
@@ -172,6 +194,18 @@ export default function FeedView({ category, label, onBack }: Props) {
       <div className="px-6 pb-4">
         <form onSubmit={handlePost} className="bg-white border border-[#e5e7e5] rounded-2xl overflow-hidden">
           <div className="px-4 pt-4 pb-2">
+            {subcategoryOptions.length > 0 && (
+              <select
+                value={subcategory}
+                onChange={e => setSubcategory(e.target.value)}
+                className="w-full bg-[#f5f5f5] text-[#1a1a1a] text-xs font-medium rounded-lg px-3 py-2 mb-2 border border-[#e5e7e5] outline-none focus:border-[#154734] transition-colors"
+              >
+                <option value="">Select a category...</option>
+                {subcategoryOptions.map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+            )}
             <textarea
               value={content}
               onChange={e => setContent(e.target.value)}
@@ -213,23 +247,45 @@ export default function FeedView({ category, label, onBack }: Props) {
         </form>
       </div>
 
+      {/* Filter pills */}
+      {subcategoryOptions.length > 0 && (
+        <div className="px-6 pb-3 flex gap-2 overflow-x-auto">
+          {['All', ...subcategoryOptions].map(opt => (
+            <button
+              key={opt}
+              onClick={() => setActiveFilter(opt)}
+              className={`shrink-0 text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
+                activeFilter === opt
+                  ? 'bg-[#154734] text-white'
+                  : 'bg-[#eef4f0] text-[#154734] hover:bg-[#ddeee5]'
+              }`}
+            >
+              {opt}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Feed */}
       <div className="flex-1 overflow-y-auto px-6 flex flex-col gap-3 pb-6">
         {fetching ? (
           <div className="flex justify-center mt-12">
             <div className="w-5 h-5 border-2 border-[#154734] border-t-transparent rounded-full animate-spin" />
           </div>
-        ) : posts.length === 0 ? (
+        ) : filteredPosts.length === 0 ? (
           <div className="flex flex-col items-center mt-16 gap-1">
             <p className="text-sm font-medium text-[#1a1a1a]/40">Nothing here yet</p>
-            <p className="text-xs text-[#1a1a1a]/25">Be the first to post</p>
+            <p className="text-xs text-[#1a1a1a]/25">
+              {activeFilter === 'All' ? 'Be the first to post' : `No posts in "${activeFilter}" yet`}
+            </p>
           </div>
         ) : (
           <AnimatePresence>
-            {posts.map((post, i) => {
+            {filteredPosts.map((post, i) => {
               const replyCount = post.replies?.length ?? 0;
               const isExpanded = expandedThreads.has(post.id);
               const isReplying = replyingTo === post.id;
+              const pillColor = post.subcategory ? (SUBCATEGORY_COLORS[post.subcategory] ?? 'bg-gray-100 text-gray-600') : null;
 
               return (
                 <motion.div
@@ -243,7 +299,7 @@ export default function FeedView({ category, label, onBack }: Props) {
                 >
                   <div className="p-4">
                     <div className="flex justify-between items-start mb-2.5">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <div className="w-7 h-7 bg-[#eef4f0] rounded-xl flex items-center justify-center shrink-0">
                           <span className="text-[11px] font-semibold text-[#154734]">
                             {(post.profiles?.username ?? '?')[0].toUpperCase()}
@@ -253,8 +309,13 @@ export default function FeedView({ category, label, onBack }: Props) {
                           <p className="text-xs font-semibold text-[#1a1a1a]">@{post.profiles?.username ?? 'unknown'}</p>
                           <p className="text-[10px] text-[#1a1a1a]/30">{timeAgo(post.created_at)}</p>
                         </div>
+                        {post.subcategory && pillColor && (
+                          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${pillColor}`}>
+                            {post.subcategory}
+                          </span>
+                        )}
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         {user?.id !== post.user_id && (
                           reportedPosts.has(post.id) ? (
                             <span className="text-[10px] text-[#1a1a1a]/25">Reported</span>
@@ -310,12 +371,7 @@ export default function FeedView({ category, label, onBack }: Props) {
 
                   <AnimatePresence>
                     {isReplying && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="border-t border-[#f0f0f0]"
-                      >
+                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="border-t border-[#f0f0f0]">
                         <form onSubmit={e => handleReply(e, post.id)} className="px-4 py-3 flex flex-col gap-2">
                           <textarea
                             value={replyContent}
@@ -341,12 +397,7 @@ export default function FeedView({ category, label, onBack }: Props) {
 
                   <AnimatePresence>
                     {isExpanded && replyCount > 0 && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: 'auto' }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="border-t border-[#f0f0f0] bg-[#fafbfa]"
-                      >
+                      <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="border-t border-[#f0f0f0] bg-[#fafbfa]">
                         {post.replies!.map((reply, idx) => (
                           <div key={reply.id} className={`px-4 py-3 ${idx < replyCount - 1 ? 'border-b border-[#f0f0f0]' : ''}`}>
                             <div className="flex gap-3">
