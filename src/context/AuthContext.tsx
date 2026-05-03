@@ -39,12 +39,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  async function fetchProfile(userId: string) {
+  async function fetchProfile(userId: string, retries = 3) {
     const { data } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
       .single();
+
+    if (!data && retries > 0) {
+      // Profile insert may not be committed yet (race condition on signup)
+      await new Promise(res => setTimeout(res, 500));
+      return fetchProfile(userId, retries - 1);
+    }
+
     setProfile(data);
     setLoading(false);
   }
