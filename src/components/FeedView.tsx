@@ -44,9 +44,27 @@ export default function FeedView({ category, label, onBack }: Props) {
   const [reportedPosts, setReportedPosts] = useState<Set<string>>(new Set());
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [replyContent, setReplyContent] = useState('');
+  const [replyImageFile, setReplyImageFile] = useState<File | null>(null);
+  const [replyImagePreview, setReplyImagePreview] = useState<string | null>(null);
   const [replyLoading, setReplyLoading] = useState(false);
   const [expandedThreads, setExpandedThreads] = useState<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const replyFileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (composeRef.current) {
+      composeRef.current.style.height = 'auto';
+      composeRef.current.style.height = `${composeRef.current.scrollHeight}px`;
+    }
+  }, [content]);
+  const composeRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (composeRef.current) {
+      composeRef.current.style.height = 'auto';
+      composeRef.current.style.height = `${composeRef.current.scrollHeight}px`;
+    }
+  }, [content]);
 
   const isLostAndFound = category === 'lost';
   const subcategoryOptions = SUBCATEGORIES[category] ?? [];
@@ -89,6 +107,19 @@ export default function FeedView({ category, label, onBack }: Props) {
     if (fileInputRef.current) fileInputRef.current.value = '';
   }
 
+  function handleReplyImageChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setReplyImageFile(file);
+    setReplyImagePreview(URL.createObjectURL(file));
+  }
+
+  function clearReplyImage() {
+    setReplyImageFile(null);
+    setReplyImagePreview(null);
+    if (replyFileInputRef.current) replyFileInputRef.current.value = '';
+  }
+
   async function handlePost(e: FormEvent) {
     e.preventDefault();
     if (!content.trim() || !user) return;
@@ -122,12 +153,24 @@ export default function FeedView({ category, label, onBack }: Props) {
     if (!replyContent.trim() || !user) return;
     setReplyLoading(true);
 
+    let image_url: string | null = null;
+    if (replyImageFile) {
+      const ext = replyImageFile.name.split('.').pop();
+      const path = `${user.id}/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from('post-images').upload(path, replyImageFile, { upsert: false });
+      if (!uploadError) {
+        const { data: urlData } = supabase.storage.from('post-images').getPublicUrl(path);
+        image_url = urlData.publicUrl;
+      }
+    }
+
     const { error } = await supabase.from('posts')
-      .insert({ user_id: user.id, content: replyContent.trim(), category, subcategory: null, parent_id: parentId });
+      .insert({ user_id: user.id, content: replyContent.trim(), category, subcategory: null, image_url, parent_id: parentId });
 
     if (!error) {
       setReplyContent('');
       setReplyingTo(null);
+      clearReplyImage();
       setExpandedThreads(prev => new Set(prev).add(parentId));
       fetchPosts();
     }
@@ -161,8 +204,8 @@ export default function FeedView({ category, label, onBack }: Props) {
   }
 
   function toggleReply(postId: string) {
-    if (replyingTo === postId) { setReplyingTo(null); setReplyContent(''); }
-    else { setReplyingTo(postId); setReplyContent(''); }
+    if (replyingTo === postId) { setReplyingTo(null); setReplyContent(''); clearReplyImage(); }
+    else { setReplyingTo(postId); setReplyContent(''); clearReplyImage(); }
   }
 
   function timeAgo(dateStr: string) {
@@ -194,26 +237,35 @@ export default function FeedView({ category, label, onBack }: Props) {
       <div className="px-6 pb-4">
         <form onSubmit={handlePost} className="bg-white border border-[#e5e7e5] rounded-2xl overflow-hidden">
           <div className="px-4 pt-4 pb-2">
-            {subcategoryOptions.length > 0 && (
-              <select
-                value={subcategory}
-                onChange={e => setSubcategory(e.target.value)}
-                className="w-full bg-[#f5f5f5] text-[#1a1a1a] text-xs font-medium rounded-lg px-3 py-2 mb-2 border border-[#e5e7e5] outline-none focus:border-[#154734] transition-colors"
-              >
-                <option value="">Select a category...</option>
-                {subcategoryOptions.map(opt => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
-              </select>
-            )}
             <textarea
+              ref={composeRef}
               value={content}
               onChange={e => setContent(e.target.value)}
               placeholder={`Share something in ${label}...`}
               rows={2}
-              className="w-full bg-transparent border-none outline-none resize-none text-sm text-[#1a1a1a] placeholder-[#1a1a1a]/25"
+              className="w-full bg-transparent border-none outline-none resize-none text-sm text-[#1a1a1a] placeholder-[#1a1a1a]/25 overflow-hidden"
             />
           </div>
+
+          {/* Subcategory pills inside compose box */}
+          {subcategoryOptions.length > 0 && (
+            <div className="flex gap-2 px-4 pb-3 flex-wrap">
+              {subcategoryOptions.map(opt => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => setSubcategory(subcategory === opt ? '' : opt)}
+                  className={`text-xs font-semibold px-3 py-1 rounded-full transition-colors ${
+                    subcategory === opt
+                      ? 'bg-[#154734] text-white'
+                      : 'bg-[#f0f0f0] text-[#1a1a1a]/60 hover:bg-[#e0e0e0]'
+                  }`}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+          )}
 
           {imagePreview && (
             <div className="relative mx-4 mb-3">
@@ -227,14 +279,12 @@ export default function FeedView({ category, label, onBack }: Props) {
           <div className="flex justify-between items-center px-4 py-3 border-t border-[#f0f0f0]">
             <div className="flex items-center gap-2">
               <span className="text-xs text-[#1a1a1a]/30 font-medium">@{profile?.username}</span>
-              {isLostAndFound && (
-                <>
-                  <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
-                  <button type="button" onClick={() => fileInputRef.current?.click()} className="text-[#154734]/30 hover:text-[#154734] transition-colors">
-                    <ImagePlus size={15} strokeWidth={2} />
-                  </button>
-                </>
-              )}
+              <>
+                <input ref={fileInputRef} type="file" accept="image/*" onChange={handleImageChange} className="hidden" />
+                <button type="button" onClick={() => fileInputRef.current?.click()} className="text-[#154734]/30 hover:text-[#154734] transition-colors">
+                  <ImagePlus size={15} strokeWidth={2} />
+                </button>
+              </>
             </div>
             <button
               type="submit"
@@ -374,15 +424,39 @@ export default function FeedView({ category, label, onBack }: Props) {
                       <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="border-t border-[#f0f0f0]">
                         <form onSubmit={e => handleReply(e, post.id)} className="px-4 py-3 flex flex-col gap-2">
                           <textarea
+                            ref={el => {
+                              if (el) {
+                                el.style.height = 'auto';
+                                el.style.height = `${el.scrollHeight}px`;
+                              }
+                            }}
                             value={replyContent}
-                            onChange={e => setReplyContent(e.target.value)}
+                            onChange={e => {
+                              setReplyContent(e.target.value);
+                              e.target.style.height = 'auto';
+                              e.target.style.height = `${e.target.scrollHeight}px`;
+                            }}
                             placeholder={`Reply to @${post.profiles?.username ?? 'unknown'}...`}
                             rows={2}
                             autoFocus
-                            className="w-full bg-transparent border-none outline-none resize-none text-sm text-[#1a1a1a] placeholder-[#1a1a1a]/25"
+                            className="w-full bg-transparent border-none outline-none resize-none text-sm text-[#1a1a1a] placeholder-[#1a1a1a]/25 overflow-hidden"
                           />
+                          {replyImagePreview && (
+                            <div className="relative">
+                              <img src={replyImagePreview} alt="reply preview" className="w-full max-h-32 object-cover rounded-xl" />
+                              <button type="button" onClick={clearReplyImage} className="absolute top-2 right-2 w-6 h-6 bg-black/50 text-white rounded-full flex items-center justify-center">
+                                <X size={11} />
+                              </button>
+                            </div>
+                          )}
                           <div className="flex justify-between items-center">
-                            <span className="text-xs text-[#1a1a1a]/30">@{profile?.username}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-[#1a1a1a]/30">@{profile?.username}</span>
+                              <input ref={replyFileInputRef} type="file" accept="image/*" onChange={handleReplyImageChange} className="hidden" />
+                              <button type="button" onClick={() => replyFileInputRef.current?.click()} className="text-[#154734]/30 hover:text-[#154734] transition-colors">
+                                <ImagePlus size={14} strokeWidth={2} />
+                              </button>
+                            </div>
                             <div className="flex gap-2">
                               <button type="button" onClick={() => toggleReply(post.id)} className="text-xs text-[#1a1a1a]/30 hover:text-[#1a1a1a]/60 transition-colors px-2 py-1">Cancel</button>
                               <button type="submit" disabled={replyLoading || !replyContent.trim()} className="bg-[#154734] text-white text-xs font-medium px-4 py-1.5 rounded-lg disabled:opacity-25 hover:bg-[#1a5c42] transition-colors">
@@ -416,6 +490,9 @@ export default function FeedView({ category, label, onBack }: Props) {
                                   )}
                                 </div>
                                 <p className="text-sm text-[#1a1a1a]/65 leading-relaxed">{reply.content}</p>
+                                {reply.image_url && (
+                                  <img src={reply.image_url} alt="reply attachment" className="mt-2 w-full max-h-40 object-cover rounded-xl" />
+                                )}
                               </div>
                             </div>
                           </div>
