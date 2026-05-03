@@ -1,11 +1,12 @@
 import { useState, FormEvent } from 'react';
 import { Sparkles, ArrowUp } from 'lucide-react';
-import { askAI } from '../lib/gemini';
+import { askAIWithContext, type PostSource } from '../lib/gemini';
 import { motion, AnimatePresence } from 'motion/react';
 
 export default function AIAssistant() {
   const [input, setInput] = useState('');
   const [response, setResponse] = useState('');
+  const [sources, setSources] = useState<PostSource[]>([]);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: FormEvent) => {
@@ -13,10 +14,14 @@ export default function AIAssistant() {
     if (!input.trim()) return;
     setLoading(true);
     setResponse('');
-    const aiResponse = await askAI(input);
-    setResponse(aiResponse || 'No response');
+    setSources([]);
+    const { answer, sources: postSources } = await askAIWithContext(input);
+    setResponse(answer);
+    setSources(postSources);
     setLoading(false);
   };
+
+  const uniqueCategories = [...new Set(sources.map((s) => s.category))];
 
   return (
     <div className="px-6 py-4">
@@ -50,7 +55,22 @@ export default function AIAssistant() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-[#1a1a1a]/70 leading-relaxed">{response}</p>
+                  <div className="flex flex-col gap-2">
+                    <p className="text-sm text-[#1a1a1a]/70 leading-relaxed">{response}</p>
+                    {uniqueCategories.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        <span className="text-xs text-[#1a1a1a]/30 font-medium">from feed:</span>
+                        {uniqueCategories.map((cat) => (
+                          <span
+                            key={cat}
+                            className="text-xs bg-[#154734]/10 text-[#154734] rounded-full px-2 py-0.5 font-medium"
+                          >
+                            {cat}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             </motion.div>
