@@ -1,5 +1,7 @@
 # MustangLink 🐴
 
+![MustangLink Demo](src/Demo.png)
+
 **An AI-powered campus community platform built in 14 hours at KiroHacks @ Cal Poly SLO.**
 
 MustangLink helps Cal Poly students navigate campus life through intelligent community hubs and an AI chatbot that understands the Cal Poly ecosystem in real time. Built under pressure, shipped with purpose.
